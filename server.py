@@ -166,32 +166,40 @@ def write_security_yml(data: dict):
         
         # 1. Map channel secrets
         c = data.get("channels", {})
-        if c.get("telegram", {}).get("token"):
-            sec_data["channels"]["telegram"] = {"token": c["telegram"]["token"]}
-        if c.get("discord", {}).get("token"):
-            sec_data["channels"]["discord"] = {"token": c["discord"]["token"]}
-        if c.get("weixin", {}).get("token"):
-            sec_data["channels"]["weixin"] = {"token": c["weixin"]["token"]}
-        if c.get("qq", {}).get("app_secret"):
-            sec_data["channels"]["qq"] = {"app_secret": c["qq"]["app_secret"]}
-        if c.get("dingtalk", {}).get("client_secret"):
-            sec_data["channels"]["dingtalk"] = {"client_secret": c["dingtalk"]["client_secret"]}
+        for chan_name in ["telegram", "discord", "weixin", "qq", "dingtalk"]:
+            if c.get(chan_name, {}).get("token") or c.get(chan_name, {}).get("app_secret") or c.get(chan_name, {}).get("client_secret"):
+                sec_data["channels"][chan_name] = {k: v for k, v in c[chan_name].items() if k in SECRET_FIELDS and v}
+        
         if c.get("slack", {}):
             s = {k: c["slack"][k] for k in ("bot_token", "app_token") if c["slack"].get(k)}
-            if s:
-                sec_data["channels"]["slack"] = s
+            if s: sec_data["channels"]["slack"] = s
+            
         if c.get("feishu", {}):
             f = {k: c["feishu"][k] for k in ("app_secret", "encrypt_key", "verification_token") if c["feishu"].get(k)}
-            if f:
-                sec_data["channels"]["feishu"] = f
+            if f: sec_data["channels"]["feishu"] = f
  
         # 2. Map provider API keys → model_list
-        # The Go V0 migration creates a model entry named after each provider;
-        # the security file must use the SAME key to match.
+        # CRITICAL FIX: The Go V1 migration uses the user's 'model' string AS the ModelName (the lookup key).
+        # If we only provide the key under 'groq', but the engine is looking for 'openai/gpt-oss-20b',
+        # it will fail to find the auth token and return 401 "No cookie auth credentials found".
+        active_model = data.get("agents", {}).get("defaults", {}).get("model", "")
+        
         for p_name, p_cfg in data.get("providers", {}).items():
             key = p_cfg.get("api_key") if isinstance(p_cfg, dict) else None
             if key:
+                # Map by provider name (standard lookup)
                 sec_data["model_list"][p_name] = {"api_keys": [key]}
+                
+                # ALSO aggressively map the key to the active_model string itself.
+                # Since the V0 configuration only supports ONE agent model at a time,
+                # we can safely assume ANY configured key might be the one intended
+                # for this model during the migration phase.
+                if active_model:
+                    sec_data["model_list"][active_model] = {"api_keys": [key]}
+                    # Also map the protocol-less version if it contains one
+                    if "/" in active_model:
+                        parts = active_model.split("/", 1)
+                        sec_data["model_list"][parts[1]] = {"api_keys": [key]}
  
         if sec_data["channels"] or sec_data["model_list"]:
             CONFIG_DIR.mkdir(parents=True, exist_ok=True)
