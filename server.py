@@ -35,8 +35,18 @@ SECRET_FIELDS = {
     "channel_secret", "channel_access_token", "client_secret",
 }
 
-CONFIG_DIR = Path(os.environ.get("PICOCLAW_HOME", Path.home() / ".picoclaw"))
+_env_home = os.environ.get("PICOCLAW_HOME")
+if _env_home:
+    CONFIG_DIR = Path(_env_home).expanduser()
+else:
+    # If HOME is relative (e.g. misconfigured to "admin"), Path.home() is relative
+    try:
+        CONFIG_DIR = Path.home() / ".picoclaw"
+    except Exception:
+        CONFIG_DIR = Path("/tmp/.picoclaw")
+
 CONFIG_PATH = CONFIG_DIR / "config.json"
+_LOCAL_CONFIG = None  # In-memory config fallback
 
 BOOT_TIME = time.time()
 
@@ -75,17 +85,24 @@ def require_auth(request: Request):
         return RedirectResponse(url="/login")
 
 def load_config():
+    global _LOCAL_CONFIG
     if not CONFIG_PATH.exists():
-        return default_config()
+        return _LOCAL_CONFIG or default_config()
     try:
         return json.loads(CONFIG_PATH.read_text())
     except Exception:
-        return default_config()
-
+        return _LOCAL_CONFIG or default_config()
 
 def save_config(data):
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    CONFIG_PATH.write_text(json.dumps(data, indent=2))
+    global _LOCAL_CONFIG
+    _LOCAL_CONFIG = data
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        CONFIG_PATH.write_text(json.dumps(data, indent=2))
+    except PermissionError as e:
+        print(f"[warn] Ignored config save permission error: {e}. Using in-memory config.")
+    except Exception as e:
+        print(f"[warn] Config save error: {e}. Using in-memory config.")
 
 
 def default_config():
