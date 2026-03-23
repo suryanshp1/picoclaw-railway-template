@@ -231,7 +231,7 @@ class GatewayManager:
         self.state = "starting"
         try:
             self.process = await asyncio.create_subprocess_exec(
-                "picoclaw", "gateway",
+                "picoclaw", "gateway", "-E",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
             )
