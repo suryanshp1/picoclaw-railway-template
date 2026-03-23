@@ -208,19 +208,53 @@ def write_security_yml(data: dict):
     except Exception as e:
         print(f"[warn] Could not write .security.yml: {e}")
 
-def save_config(data):
-    global _LOCAL_CONFIG
-    # Fix 1: sanitize model string (prevent double-prefix like groq/openai/model)
-    agents = data.get("agents", {}).get("defaults", {})
-    if isinstance(agents.get("model"), str):
-        data["agents"]["defaults"]["model"] = sanitize_model_string(agents["model"])
-    # Fix 2: ensure api_base is always present for known providers
+def save_config(data: dict):
+    """Save configuration in V1 format, ensuring Go engine compatibility.
+    The Go engine (V1) is more reliable than the V0 migration path."""
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # 1. Ensure version is 1
+    data["version"] = 1
+    
+    # 2. Sanitize and enforce
     data = enforce_provider_api_bases(data)
+    
+    # 3. Generate model_list for Go engine (V1 schema)
+    # The Go engine looks up models by 'model_name'. We MUST ensure
+    # that the user's active model string has an entry here.
+    model_list = []
+    active_model = data.get("agents", {}).get("defaults", {}).get("model", "")
+    active_provider = data.get("agents", {}).get("defaults", {}).get("provider", "")
+    
+    # Add an entry for the primary agent model (exact match lookup)
+    if active_model:
+        p_cfg = data.get("providers", {}).get(active_provider, {})
+        model_list.append({
+            "model_name": active_model,
+            "model": active_model,
+            "api_base": p_cfg.get("api_base") or PROVIDER_API_BASES.get(active_provider, ""),
+            "request_timeout": p_cfg.get("request_timeout", 0)
+        })
+        
+    # Add entries for all providers by name (fallback compatibility)
+    for p_name, p_cfg in data.get("providers", {}).items():
+        if p_name == active_provider and active_model:
+            continue # already added
+        model_list.append({
+            "model_name": p_name,
+            "model": p_name + "/auto",
+            "api_base": p_cfg.get("api_base") or PROVIDER_API_BASES.get(p_name, ""),
+            "request_timeout": p_cfg.get("request_timeout", 0)
+        })
+    
+    data["model_list"] = model_list
+    
+    # 4. Write secrets and main config
+    write_security_yml(data)
     _LOCAL_CONFIG = data
     try:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         CONFIG_PATH.write_text(json.dumps(data, indent=2))
-        # Fix 3: always regenerate .security.yml so Go engine can read the secrets
         write_security_yml(data)
     except PermissionError as e:
         print(f"[warn] Ignored config save permission error: {e}. Using in-memory config.")
