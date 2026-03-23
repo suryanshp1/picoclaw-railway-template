@@ -216,7 +216,13 @@ def save_config(data: dict):
     # 1. Ensure version is 1
     data["version"] = 1
     
-    # 2. Sanitize and enforce
+    # 2. Update agents.defaults to use V1 field names (model_name)
+    # The Go V1 engine only looks at 'model_name'; 'model' is deprecated.
+    defaults = data.get("agents", {}).get("defaults", {})
+    if isinstance(defaults.get("model"), str):
+        defaults["model_name"] = defaults["model"]
+        
+    # 3. Sanitize and enforce
     data = enforce_provider_api_bases(data)
     
     # 3. Generate model_list for Go engine (V1 schema)
