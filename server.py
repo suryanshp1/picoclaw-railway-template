@@ -110,50 +110,110 @@ def load_config():
     except Exception:
         return _LOCAL_CONFIG or default_config()
 
+
+# --- Known provider api_base values ------------------------------------------------
+# These are REQUIRED for the Go engine to know the correct endpoint.
+# Without these, the engine either fails to build the Bearer auth header or
+# routes to the wrong URL (causing the 401 "No cookie auth credentials found" error).
+PROVIDER_API_BASES = {
+    "groq":       "https://api.groq.com/openai/v1",
+    "openrouter": "https://openrouter.ai/api/v1",
+    "deepseek":   "https://api.deepseek.com/v1",
+    "moonshot":   "https://api.moonshot.cn/v1",
+}
+
+# Protocol prefixes the Go engine uses — the user MUST NOT include these in
+# the model field because the engine adds them itself during the V0→V1 migration.
+PROTOCOL_PREFIXES = {
+    "groq", "openai", "anthropic", "openrouter", "gemini",
+    "deepseek", "moonshot", "zhipu", "vllm", "nvidia",
+}
+
+
+def sanitize_model_string(model: str) -> str:
+    """Remove double protocol prefixes like 'groq/openai/...' -> 'openai/...'
+    or 'groq/groq/...' -> 'groq/...'. The Go engine adds the prefix itself."""
+    parts = model.split("/", 1)
+    if len(parts) == 2:
+        prefix, rest = parts
+        # If prefix is a known Go protocol AND rest also starts with a known protocol,
+        # it is double-prefixed — strip the outer one.
+        rest_prefix = rest.split("/")[0]
+        if prefix.lower() in PROTOCOL_PREFIXES and rest_prefix.lower() in PROTOCOL_PREFIXES:
+            return rest  # e.g. 'groq/openai/gpt-oss-20b' -> 'openai/gpt-oss-20b'
+    return model
+
+
+def enforce_provider_api_bases(data: dict) -> dict:
+    """Ensure providers with known api_base always have it set in config.
+    Without api_base, the Go engine cannot construct the correct HTTP endpoint
+    and Groq/OpenRouter returns 401 'No cookie auth credentials found'."""
+    providers = data.get("providers", {})
+    for p_name, base_url in PROVIDER_API_BASES.items():
+        if p_name in providers and isinstance(providers[p_name], dict):
+            if not providers[p_name].get("api_base"):
+                providers[p_name]["api_base"] = base_url
+    return data
+
+
+def write_security_yml(data: dict):
+    """Write .security.yml for the Go Engine's V1 security schema.
+    The Go engine reads credentials ONLY from this file; secrets in config.json
+    are silently ignored after V0->V1 migration."""
+    try:
+        sec_path = CONFIG_DIR / ".security.yml"
+        sec_data: dict = {"channels": {}, "model_list": {}}
+        
+        # 1. Map channel secrets
+        c = data.get("channels", {})
+        if c.get("telegram", {}).get("token"):
+            sec_data["channels"]["telegram"] = {"token": c["telegram"]["token"]}
+        if c.get("discord", {}).get("token"):
+            sec_data["channels"]["discord"] = {"token": c["discord"]["token"]}
+        if c.get("weixin", {}).get("token"):
+            sec_data["channels"]["weixin"] = {"token": c["weixin"]["token"]}
+        if c.get("qq", {}).get("app_secret"):
+            sec_data["channels"]["qq"] = {"app_secret": c["qq"]["app_secret"]}
+        if c.get("dingtalk", {}).get("client_secret"):
+            sec_data["channels"]["dingtalk"] = {"client_secret": c["dingtalk"]["client_secret"]}
+        if c.get("slack", {}):
+            s = {k: c["slack"][k] for k in ("bot_token", "app_token") if c["slack"].get(k)}
+            if s:
+                sec_data["channels"]["slack"] = s
+        if c.get("feishu", {}):
+            f = {k: c["feishu"][k] for k in ("app_secret", "encrypt_key", "verification_token") if c["feishu"].get(k)}
+            if f:
+                sec_data["channels"]["feishu"] = f
+ 
+        # 2. Map provider API keys → model_list
+        # The Go V0 migration creates a model entry named after each provider;
+        # the security file must use the SAME key to match.
+        for p_name, p_cfg in data.get("providers", {}).items():
+            key = p_cfg.get("api_key") if isinstance(p_cfg, dict) else None
+            if key:
+                sec_data["model_list"][p_name] = {"api_keys": [key]}
+ 
+        if sec_data["channels"] or sec_data["model_list"]:
+            CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            with open(sec_path, "w") as f:
+                yaml.dump(sec_data, f, default_flow_style=False)
+    except Exception as e:
+        print(f"[warn] Could not write .security.yml: {e}")
+
 def save_config(data):
     global _LOCAL_CONFIG
+    # Fix 1: sanitize model string (prevent double-prefix like groq/openai/model)
+    agents = data.get("agents", {}).get("defaults", {})
+    if isinstance(agents.get("model"), str):
+        data["agents"]["defaults"]["model"] = sanitize_model_string(agents["model"])
+    # Fix 2: ensure api_base is always present for known providers
+    data = enforce_provider_api_bases(data)
     _LOCAL_CONFIG = data
     try:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         CONFIG_PATH.write_text(json.dumps(data, indent=2))
-        
-        # Manually generate .security.yml for the Go Engine
-        sec_path = CONFIG_DIR / ".security.yml"
-        sec_data = {"channels": {}, "model_list": {}}
-        
-        # 1. Map Channels
-        c = data.get("channels", {})
-        if c.get("telegram", {}).get("token"): sec_data["channels"]["telegram"] = {"token": c["telegram"]["token"]}
-        if c.get("discord", {}).get("token"): sec_data["channels"]["discord"] = {"token": c["discord"]["token"]}
-        if c.get("weixin", {}).get("token"): sec_data["channels"]["weixin"] = {"token": c["weixin"]["token"]}
-        if c.get("qq", {}).get("app_secret"): sec_data["channels"]["qq"] = {"app_secret": c["qq"]["app_secret"]}
-        if c.get("dingtalk", {}).get("client_secret"): sec_data["channels"]["dingtalk"] = {"client_secret": c["dingtalk"]["client_secret"]}
-        
-        if c.get("slack", {}):
-            s = {}
-            if c["slack"].get("bot_token"): s["bot_token"] = c["slack"]["bot_token"]
-            if c["slack"].get("app_token"): s["app_token"] = c["slack"]["app_token"]
-            if s: sec_data["channels"]["slack"] = s
-            
-        if c.get("feishu", {}):
-            f = {}
-            if c["feishu"].get("app_secret"): f["app_secret"] = c["feishu"]["app_secret"]
-            if c["feishu"].get("encrypt_key"): f["encrypt_key"] = c["feishu"]["encrypt_key"]
-            if c["feishu"].get("verification_token"): f["verification_token"] = c["feishu"]["verification_token"]
-            if f: sec_data["channels"]["feishu"] = f
-
-        # 2. Map Provider API Keys (to ModelList in security.yml)
-        # PicoClaw legacy migration creates models named after the provider
-        providers = data.get("providers", {})
-        for p_name, p_cfg in providers.items():
-            key = p_cfg.get("api_key")
-            if key:
-                sec_data["model_list"][p_name] = {"api_keys": [key]}
-            
-        if sec_data["channels"] or sec_data["model_list"]:
-            with open(sec_path, "w") as f:
-                yaml.dump(sec_data, f)
-
+        # Fix 3: always regenerate .security.yml so Go engine can read the secrets
+        write_security_yml(data)
     except PermissionError as e:
         print(f"[warn] Ignored config save permission error: {e}. Using in-memory config.")
     except Exception as e:
@@ -240,6 +300,11 @@ def init_from_env():
             if not config.get(section, {}).get(name, {}).get(field):
                 config.setdefault(section, {}).setdefault(name, {})[field] = value
                 changed = True
+
+    # Always enforce correct api_bases and write security.yml on every boot
+    # even if no env vars were updated (Railway restarts with a clean FS)
+    config = enforce_provider_api_bases(config)
+    write_security_yml(config)
 
     if changed:
         save_config(config)
