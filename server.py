@@ -283,6 +283,9 @@ ENV_PROVIDER_MAP = {
     "GEMINI_API_KEY": ("providers", "gemini", "api_key"),
     "OPENROUTER_API_KEY": ("providers", "openrouter", "api_key"),
     "DEEPSEEK_API_KEY": ("providers", "deepseek", "api_key"),
+    "GROQ_MODEL": ("agents", "defaults", "model"),
+    "OPENROUTER_MODEL": ("agents", "defaults", "model"),
+    "DEEPSEEK_MODEL": ("agents", "defaults", "model"),
     "TELEGRAM_BOT_TOKEN": ("channels", "telegram", "token"),
     "DISCORD_BOT_TOKEN": ("channels", "discord", "token"),
     "SLACK_BOT_TOKEN": ("channels", "slack", "bot_token"),
@@ -307,6 +310,12 @@ def init_from_env():
                     
             if not config.get(section, {}).get(name, {}).get(field):
                 config.setdefault(section, {}).setdefault(name, {})[field] = value
+                
+                # CRITICAL: If setting a model from a specific provider env var,
+                # also set that provider as the default for the agent.
+                if field == "model" and section == "agents":
+                     config["agents"]["defaults"]["provider"] = name
+                
                 changed = True
 
     # Always enforce correct api_bases and write security.yml on every boot
