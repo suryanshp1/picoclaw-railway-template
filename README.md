@@ -1,129 +1,81 @@
 ![PicoClaw](https://raw.githubusercontent.com/sipeed/picoclaw/main/assets/logo.jpg)
 
-# Deploy and Host PicoClaw | Lightweight Alternative of OpenClaw | Self Host on Railway
+# PicoClaw | Lightweight AI Agent Backend | Render Free-Tier Ready
 
-**Picoclaw** is a lightweight, open-source AI agent backend. Think of it as a simpler, more minimal alternative to OpenClaw. You host it yourself, connect a model provider, plug in a messaging channel, and your AI agent is live.
+**PicoClaw** is a lightweight, open-source AI agent control panel. Think of it as a simpler, more minimal alternative to OpenClaw. You host it yourself, connect a model provider, plug in a messaging channel, and your AI agent is live.
 
-No heavy UI. No complex setup. Just a clean backend that does the job.
+## 🚀 Advanced Deployment Version
 
-## What is PicoClaw? 🤖
+This specialized version of PicoClaw has been heavily optimized and upgraded for **zero-cost hosting on Render's Free Tier** and features a premium modern dashboard.
 
-Picoclaw is a small AI agent framework built for developers who want control. It connects to language model providers (like OpenAI), runs agent logic, and sends responses through channels such as Telegram or Discord.
-
-It’s backend-first.
-You bring the model.
-You bring the channel.
-Picoclaw connects everything together.
-
-
-## Setup Guide (4 Simple Steps) 🛠️
-
-**1️⃣ Deploy**
-Click the deploy button and create your Railway project. Then click on the link provided by railway and login using credentials present in Environment Variables.
-
-**2️⃣ Add a Provider**
-Connect a language model provider (e.g., OpenAI) using your API key.
-
-**3️⃣ Add a Channel**
-Picoclaw does not include a built-in chat UI.
-You must connect a channel like Telegram or Discord to send and receive messages.
-
-Once both provider and channel are active, your agent is ready.
-
-
-## About Hosting PicoClaw | Lightweight Alternative of OpenClaw | Self Host
-
-Hosting Picoclaw on Railway is straightforward.
-
-You deploy the repo.
-Add a provider API key.
-Connect at least one messaging channel.
-
-Railway builds the project automatically and gives you a public URL. It handles uptime and infrastructure. You don’t need to manage servers or Docker manually.
-
-The only real work is configuring your provider and channel correctly. Once that’s done, the agent runs continuously in the background.
-
-## Common Use Cases of PicoClaw
-
-* Run a self-hosted AI assistant
-* Build Telegram or Discord AI bots
-* Power internal automation workflows
-* Experiment with custom agent logic
-* Create AI tools without relying on SaaS platforms
-
-## Dependencies for PicoClaw | Lightweight Alternative of OpenClaw | Self Host Hosting
-
-* GitHub repository (Picoclaw template)
-* Railway account
-* Provider API key (e.g., OpenAI)
-* At least one messaging channel integration
-
-### Deployment Dependencies
-
-* Environment variables configured in Railway
-* Provider credentials
-* Channel credentials (Telegram bot token, Discord webhook, etc.)
----
-
-## Pricing & System Requirements 💰
-
-### Railway Hosting Cost
-
-Railway pricing typically works like this:
-
-* **Free tier:** Trial credits, limited CPU and RAM
-* **Hobby plan:** Around $5/month base + usage
-* **Pro plan:** Around $20/month base + usage
-
-For light usage (personal bot, small traffic), the Hobby plan is usually enough.
-
-Important:
-Your bigger cost will likely be the **model provider API usage**, not Railway hosting.
-
-### System Requirements
-
-Picoclaw itself is lightweight.
-
-For small to moderate traffic:
-
-* 1 vCPU
-* 0.5–1 GB RAM
-
-If you expect heavy traffic or many concurrent users, scale up RAM and CPU accordingly.
+### ✨ Key Features
+* **Zero-Cost Optimized:** Built specifically to survive Render's 512MB RAM cap and ephemeral filesystem using memory optimizations and environment-variable config auto-loading.
+* **Anti-Sleep Keep-Alive:** Includes a background ping mechanism to prevent Render from spinning down the instance after 15 minutes of inactivity.
+* **Glassmorphism Dashboard:** A sleek, modern, dark-mode UI with live system metrics and provider bridging status.
+* **Enterprise Security:** Replaces insecure Basic Auth with a custom JWT session authentication system (HttpOnly cookies).
+* **Real-time SSE Logs:** Streams gateway terminal logs to your browser instantly over Server-Sent Events (SSE) with zero polling overhead.
+* **Live API Health Checks:** Test your provider API keys (OpenAI, Anthropic, Gemini, Groq) directly from the UI to ensure they are valid before running the agent.
 
 ---
 
+## 🛠️ Setup Guide (Render Free Tier)
 
-## Picoclaw vs OpenClaw ⚖️
+**1️⃣ Fork and Deploy**
+Fork this repository and connect it to a new Render Web Service.
 
-**Picoclaw**
+**2️⃣ Configure Environment Variables**
+Because Render's free tier uses an ephemeral filesystem, your API keys will be wiped on restart if you don't save them as environment variables.
+In your Render dashboard, set the following:
+* `ADMIN_PASSWORD` - Your secure login password
+* `JWT_SECRET` - A long random string for securing your sessions
+* `OPENAI_API_KEY` (or `ANTHROPIC_API_KEY`, `GROQ_API_KEY`, etc.)
+* `TELEGRAM_BOT_TOKEN` (or other channel tokens)
 
-* Lightweight
+**3️⃣ Login to the Dashboard**
+Once deployed, visit your Render URL and log in using the `ADMIN_PASSWORD` you provided to view the live dashboard and manage your gateway.
+
+---
+
+## 💻 Tech Stack
+* **Backend:** Python, Starlette, Uvicorn, PyJWT, HTTPX
+* **Frontend:** HTML5, TailwindCSS, Alpine.js (Zero Build Step)
+* **Agent Engine:** PicoClaw Go Binary
+* **Infrastructure:** Docker (Alpine Linux, non-root user)
+
+---
+
+## 💰 Pricing & Infrastructure
+
+### Render Hosting Cost
+* **Free tier:** $0/month. This template is optimized to never sleep and stay within the 512MB RAM limit.
+* Note: You are still responsible for paying your AI Model Provider (e.g., OpenAI) for the API calls the agent generates.
+
+### Memory Optimizations
+This build includes aggressive garbage collection, reduced log buffering, and stripped Docker base layers to ensure it runs comfortably under 100MB of RAM, leaving plenty of room for the agent process.
+
+---
+
+## ⚖️ PicoClaw vs OpenClaw
+
+**PicoClaw**
+* Extremely lightweight backend
 * Minimal setup
-* Backend focused
-* Easy to self-host
+* Self-hostable for free
+* Focuses purely on routing models to channels
 
 **OpenClaw**
-
 * Broader feature set
-* More complex setup
-* Heavier resource usage
+* Heavy resource usage
+* Expensive to host standalone
 
-If you want something simple and controllable, Picoclaw makes more sense. If you need a large ecosystem and built-in features, OpenClaw may fit better.
-
----
-
-## FAQs ❓
-
-**Does Picoclaw have a web chat UI?**
-No. You interact through connected channels.
-
-**Do I still pay for model usage?**
-Yes. Railway hosts the backend. Your model provider charges separately.
-
-**How long does deployment take?**
-Usually a few minutes once the repo is connected.
+If you want a controllable, single-agent backend that's free to host, PicoClaw makes more sense.
 
 ---
 
+## ❓ FAQs
 
+**Does PicoClaw have a web chat UI?**
+No. You interact with the agent through connected external channels like Discord or Telegram. The web UI is strictly a beautiful control panel for managing the server.
+
+**How does the keep-alive work?**
+It automatically detects its own public `RENDER_EXTERNAL_URL` and sends a lightweight HTTP ping to its own `/health` endpoint every 14 minutes, completely preventing the "cold start" spin-down.

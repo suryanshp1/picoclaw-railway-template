@@ -4,3 +4,4 @@ __pycache__/
 .env
 picclaw-old
 archive\*
+venv/

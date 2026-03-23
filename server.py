@@ -7,6 +7,10 @@ import secrets
 import signal
 import time
 from collections import deque
+import gc
+import httpx
+import jwt
+import datetime
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -20,7 +24,7 @@ from starlette.authentication import (
 from starlette.middleware import Middleware
 from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse, PlainTextResponse
+from starlette.responses import JSONResponse, PlainTextResponse, StreamingResponse, RedirectResponse
 from starlette.routing import Route
 from starlette.templating import Jinja2Templates
 
@@ -34,6 +38,8 @@ SECRET_FIELDS = {
 CONFIG_DIR = Path(os.environ.get("PICOCLAW_HOME", Path.home() / ".picoclaw"))
 CONFIG_PATH = CONFIG_DIR / "config.json"
 
+BOOT_TIME = time.time()
+
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
@@ -43,37 +49,30 @@ if not ADMIN_PASSWORD:
     ADMIN_PASSWORD = secrets.token_urlsafe(16)
     print(f"Generated admin password: {ADMIN_PASSWORD}")
 
+JWT_SECRET = os.environ.get("JWT_SECRET", secrets.token_hex(32))
 
-class BasicAuthBackend(AuthenticationBackend):
-    async def authenticate(self, conn):
-        if "Authorization" not in conn.headers:
-            return None
-
-        auth = conn.headers["Authorization"]
-        try:
-            scheme, credentials = auth.split()
-            if scheme.lower() != "basic":
-                return None
-            decoded = base64.b64decode(credentials).decode("ascii")
-        except (ValueError, UnicodeDecodeError):
-            raise AuthenticationError("Invalid credentials")
-
-        username, _, password = decoded.partition(":")
-        if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
-            return AuthCredentials(["authenticated"]), SimpleUser(username)
-
-        raise AuthenticationError("Invalid credentials")
-
+def create_token(username: str) -> str:
+    payload = {
+        "sub": username,
+        "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=30),
+        "iat": datetime.datetime.now(datetime.timezone.utc),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 def require_auth(request: Request):
-    if not request.user.is_authenticated:
-        return PlainTextResponse(
-            "Unauthorized",
-            status_code=401,
-            headers={"WWW-Authenticate": 'Basic realm="picoclaw"'},
-        )
-    return None
-
+    token = request.cookies.get("auth_token")
+    if not token:
+        # For API routes return 401, for HTML routes return redirect
+        if request.url.path.startswith("/api/"):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        return RedirectResponse(url="/login")
+    try:
+        jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        return None
+    except jwt.InvalidTokenError:
+        if request.url.path.startswith("/api/"):
+            return JSONResponse({"error": "Invalid token"}, status_code=401)
+        return RedirectResponse(url="/login")
 
 def load_config():
     if not CONFIG_PATH.exists():
@@ -137,6 +136,43 @@ def default_config():
     }
 
 
+ENV_PROVIDER_MAP = {
+    "OPENAI_API_KEY": ("providers", "openai", "api_key"),
+    "ANTHROPIC_API_KEY": ("providers", "anthropic", "api_key"),
+    "GROQ_API_KEY": ("providers", "groq", "api_key"),
+    "GEMINI_API_KEY": ("providers", "gemini", "api_key"),
+    "OPENROUTER_API_KEY": ("providers", "openrouter", "api_key"),
+    "DEEPSEEK_API_KEY": ("providers", "deepseek", "api_key"),
+    "TELEGRAM_BOT_TOKEN": ("channels", "telegram", "token"),
+    "DISCORD_BOT_TOKEN": ("channels", "discord", "token"),
+    "SLACK_BOT_TOKEN": ("channels", "slack", "bot_token"),
+    "SLACK_APP_TOKEN": ("channels", "slack", "app_token"),
+}
+
+
+def init_from_env():
+    config = load_config()
+    changed = False
+    
+    for env_key, path in ENV_PROVIDER_MAP.items():
+        value = os.environ.get(env_key, "")
+        if value:
+            section, name, field = path
+            
+            # For channels, also auto-enable if token provided
+            if section == "channels":
+                if not config.get(section, {}).get(name, {}).get("enabled"):
+                    config.setdefault(section, {}).setdefault(name, {})["enabled"] = True
+                    changed = True
+                    
+            if not config.get(section, {}).get(name, {}).get(field):
+                config.setdefault(section, {}).setdefault(name, {})[field] = value
+                changed = True
+
+    if changed:
+        save_config(config)
+
+
 def mask_secrets(data, _path=""):
     if isinstance(data, dict):
         result = {}
@@ -167,7 +203,7 @@ class GatewayManager:
     def __init__(self):
         self.process: asyncio.subprocess.Process | None = None
         self.state = "stopped"
-        self.logs: deque[str] = deque(maxlen=500)
+        self.logs: deque[str] = deque(maxlen=200) # Reduced for memory optimization
         self.start_time: float | None = None
         self.restart_count = 0
         self._read_tasks: list[asyncio.Task] = []
@@ -203,6 +239,7 @@ class GatewayManager:
             await self.process.wait()
         self.state = "stopped"
         self.start_time = None
+        gc.collect() # Free up memory immediately
 
     async def restart(self):
         await self.stop()
@@ -218,6 +255,11 @@ class GatewayManager:
                 decoded = line.decode("utf-8", errors="replace").rstrip()
                 cleaned = ANSI_ESCAPE.sub("", decoded)
                 self.logs.append(cleaned)
+                # Broadcast log to all SSE listeners
+                for q in sse_queues:
+                    # Non-blocking put, skip if full to avoid backpressure OOM
+                    if not q.full():
+                        q.put_nowait(cleaned)
         except asyncio.CancelledError:
             return
         if self.process and self.process.returncode is not None and self.state == "running":
@@ -241,6 +283,39 @@ class GatewayManager:
 
 gateway = GatewayManager()
 config_lock = asyncio.Lock()
+sse_queues: list[asyncio.Queue] = []
+
+
+async def login_page(request: Request):
+    token = request.cookies.get("auth_token")
+    if token:
+        try:
+            jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+            return RedirectResponse(url="/")
+        except jwt.InvalidTokenError:
+            pass
+    return templates.TemplateResponse(request, "login.html")
+
+
+async def api_login(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid request"}, status_code=400)
+    
+    pwd = body.get("password")
+    if pwd == ADMIN_PASSWORD:
+        token = create_token("admin")
+        res = JSONResponse({"ok": True})
+        res.set_cookie("auth_token", token, httponly=True, samesite="lax", max_age=2592000)
+        return res
+    return JSONResponse({"error": "Invalid password"}, status_code=401)
+
+
+async def api_logout(request: Request):
+    res = JSONResponse({"ok": True})
+    res.delete_cookie("auth_token")
+    return res
 
 
 async def homepage(request: Request):
@@ -251,7 +326,13 @@ async def homepage(request: Request):
 
 
 async def health(request: Request):
-    return JSONResponse({"status": "ok", "gateway": gateway.state})
+    cold = (time.time() - BOOT_TIME) < 30
+    return JSONResponse({
+        "status": "ok", 
+        "gateway": gateway.state, 
+        "cold_start": cold,
+        "uptime_seconds": int(time.time() - BOOT_TIME)
+    })
 
 
 async def api_config_get(request: Request):
@@ -320,11 +401,79 @@ async def api_status(request: Request):
     })
 
 
-async def api_logs(request: Request):
+async def api_logs_stream(request: Request):
     auth_err = require_auth(request)
     if auth_err:
         return auth_err
-    return JSONResponse({"lines": list(gateway.logs)})
+        
+    async def event_generator():
+        q = asyncio.Queue(maxsize=100)
+        sse_queues.append(q)
+        try:
+            # Yield history
+            for line in gateway.logs:
+                yield f"data: {json.dumps({'line': line})}\n\n"
+            # Yield new streams
+            while True:
+                line = await q.get()
+                yield f"data: {json.dumps({'line': line})}\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if q in sse_queues:
+                sse_queues.remove(q)
+
+    return StreamingResponse(
+        event_generator(), 
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )
+
+
+PROVIDER_TEST_URLS = {
+    "openai": "https://api.openai.com/v1/models",
+    "anthropic": "https://api.anthropic.com/v1/models",
+    "groq": "https://api.groq.com/openai/v1/models",
+    "gemini": "https://generativelanguage.googleapis.com/v1/models",
+}
+
+async def api_provider_health(request: Request):
+    auth_err = require_auth(request)
+    if auth_err:
+        return auth_err
+        
+    config = load_config()
+    results = {}
+    
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        # We only ping active providers or selectively test
+        # To avoid rate limits, we'll only test ones that have an API key configured.
+        providers_conf = config.get("providers", {})
+        
+        for name, url in PROVIDER_TEST_URLS.items():
+            key = providers_conf.get(name, {}).get("api_key", "")
+            if not key:
+                results[name] = {"status": "not_configured"}
+                continue
+                
+            try:
+                headers = {"Authorization": f"Bearer {key}"}
+                if name == "anthropic":
+                    headers["x-api-key"] = key
+                    # Anthropic doesn't use standard Bearer
+                    headers["anthropic-version"] = "2023-06-01"
+                    if "Authorization" in headers:
+                        del headers["Authorization"]
+                        
+                resp = await client.get(url, headers=headers)
+                results[name] = {
+                    "status": "ok" if resp.status_code < 400 else "error", 
+                    "code": resp.status_code
+                }
+            except Exception as e:
+                results[name] = {"status": "unreachable", "error": str(e)}
+                
+    return JSONResponse(results)
 
 
 async def api_gateway_start(request: Request):
@@ -362,22 +511,45 @@ async def auto_start_gateway():
         asyncio.create_task(gateway.start())
 
 
+SELF_PING_INTERVAL = int(os.environ.get("SELF_PING_INTERVAL", "840"))  # 14 min
+RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "")
+
+async def self_ping_loop():
+    if not RENDER_EXTERNAL_URL:
+        return
+    await asyncio.sleep(60)  # Let it boot first
+    async with httpx.AsyncClient(timeout=10) as client:
+        while True:
+            try:
+                await client.get(f"{RENDER_EXTERNAL_URL}/health")
+            except Exception:
+                pass
+            await asyncio.sleep(SELF_PING_INTERVAL)
+
+
 @asynccontextmanager
 async def lifespan(app):
     # startup
+    init_from_env()
     await auto_start_gateway()
+    ping_task = asyncio.create_task(self_ping_loop())
     yield
     # shutdown
+    ping_task.cancel()
     await gateway.stop()
 
 
 routes = [
     Route("/", homepage),
+    Route("/login", login_page),
     Route("/health", health),
+    Route("/api/login", api_login, methods=["POST"]),
+    Route("/api/logout", api_logout, methods=["POST"]),
     Route("/api/config", api_config_get, methods=["GET"]),
     Route("/api/config", api_config_put, methods=["PUT"]),
     Route("/api/status", api_status),
-    Route("/api/logs", api_logs),
+    Route("/api/provider/health", api_provider_health),
+    Route("/api/logs/stream", api_logs_stream),
     Route("/api/gateway/start", api_gateway_start, methods=["POST"]),
     Route("/api/gateway/stop", api_gateway_stop, methods=["POST"]),
     Route("/api/gateway/restart", api_gateway_restart, methods=["POST"]),
@@ -385,7 +557,6 @@ routes = [
 
 app = Starlette(
     routes=routes,
-    middleware=[Middleware(AuthenticationMiddleware, backend=BasicAuthBackend())],
     lifespan=lifespan,
 )
 
