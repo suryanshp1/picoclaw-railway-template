@@ -131,16 +131,16 @@ PROTOCOL_PREFIXES = {
 
 
 def sanitize_model_string(model: str) -> str:
-    """Remove double protocol prefixes like 'groq/openai/...' -> 'openai/...'
-    or 'groq/groq/...' -> 'groq/...'. The Go engine adds the prefix itself."""
+    """Remove IDENTICAL double protocol prefixes like 'groq/groq/...' -> 'groq/...'
+    while preserving cross-provider prefixes like 'groq/openai/...' which are 
+    necessary for the Go engine to route to the correct driver."""
     parts = model.split("/", 1)
     if len(parts) == 2:
         prefix, rest = parts
-        # If prefix is a known Go protocol AND rest also starts with a known protocol,
-        # it is double-prefixed — strip the outer one.
         rest_prefix = rest.split("/")[0]
-        if prefix.lower() in PROTOCOL_PREFIXES and rest_prefix.lower() in PROTOCOL_PREFIXES:
-            return rest  # e.g. 'groq/openai/gpt-oss-20b' -> 'openai/gpt-oss-20b'
+        # Only strip if the outer prefix is exactly the same as the inner prefix
+        if prefix.lower() == rest_prefix.lower() and prefix.lower() in PROTOCOL_PREFIXES:
+            return rest
     return model
 
 
