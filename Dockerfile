@@ -4,9 +4,9 @@ RUN apk add --no-cache git make
 
 WORKDIR /src
 
-ARG PICOCLAW_VERSION=v1.0.0
-
-RUN git clone --depth 1 --branch ${PICOCLAW_VERSION} https://github.com/sipeed/picoclaw.git .
+ARG PICOCLAW_VERSION=main
+RUN git clone --depth 1 --branch ${PICOCLAW_VERSION} \
+    https://github.com/sipeed/picoclaw.git .
 RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux make build
 
