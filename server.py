@@ -45,6 +45,13 @@ else:
     except Exception:
         CONFIG_DIR = Path("/tmp/.picoclaw")
 
+# Strictly enforce an absolute path. If the environment (like HOME) leaked a relative string,
+# we MUST override it to an absolute path, otherwise the Go engine crashes trying to mkdir it.
+if not CONFIG_DIR.is_absolute():
+    fallback_base = Path("/data") if Path("/data").exists() else Path("/tmp")
+    CONFIG_DIR = fallback_base / ".picoclaw"
+    print(f"[warn] Enforcing absolute config path: {CONFIG_DIR}")
+
 CONFIG_PATH = CONFIG_DIR / "config.json"
 _LOCAL_CONFIG = None  # In-memory config fallback
 
