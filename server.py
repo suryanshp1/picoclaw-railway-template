@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import os
+import yaml
 import re
 import secrets
 import signal
@@ -115,6 +116,44 @@ def save_config(data):
     try:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         CONFIG_PATH.write_text(json.dumps(data, indent=2))
+        
+        # Manually generate .security.yml for the Go Engine
+        sec_path = CONFIG_DIR / ".security.yml"
+        sec_data = {"channels": {}, "model_list": {}}
+        
+        # 1. Map Channels
+        c = data.get("channels", {})
+        if c.get("telegram", {}).get("token"): sec_data["channels"]["telegram"] = {"token": c["telegram"]["token"]}
+        if c.get("discord", {}).get("token"): sec_data["channels"]["discord"] = {"token": c["discord"]["token"]}
+        if c.get("weixin", {}).get("token"): sec_data["channels"]["weixin"] = {"token": c["weixin"]["token"]}
+        if c.get("qq", {}).get("app_secret"): sec_data["channels"]["qq"] = {"app_secret": c["qq"]["app_secret"]}
+        if c.get("dingtalk", {}).get("client_secret"): sec_data["channels"]["dingtalk"] = {"client_secret": c["dingtalk"]["client_secret"]}
+        
+        if c.get("slack", {}):
+            s = {}
+            if c["slack"].get("bot_token"): s["bot_token"] = c["slack"]["bot_token"]
+            if c["slack"].get("app_token"): s["app_token"] = c["slack"]["app_token"]
+            if s: sec_data["channels"]["slack"] = s
+            
+        if c.get("feishu", {}):
+            f = {}
+            if c["feishu"].get("app_secret"): f["app_secret"] = c["feishu"]["app_secret"]
+            if c["feishu"].get("encrypt_key"): f["encrypt_key"] = c["feishu"]["encrypt_key"]
+            if c["feishu"].get("verification_token"): f["verification_token"] = c["feishu"]["verification_token"]
+            if f: sec_data["channels"]["feishu"] = f
+
+        # 2. Map Provider API Keys (to ModelList in security.yml)
+        # PicoClaw legacy migration creates models named after the provider
+        providers = data.get("providers", {})
+        for p_name, p_cfg in providers.items():
+            key = p_cfg.get("api_key")
+            if key:
+                sec_data["model_list"][p_name] = {"api_keys": [key]}
+            
+        if sec_data["channels"] or sec_data["model_list"]:
+            with open(sec_path, "w") as f:
+                yaml.dump(sec_data, f)
+
     except PermissionError as e:
         print(f"[warn] Ignored config save permission error: {e}. Using in-memory config.")
     except Exception as e:
