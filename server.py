@@ -7,6 +7,7 @@ import secrets
 import signal
 import time
 from collections import deque
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from starlette.applications import Starlette
@@ -361,6 +362,15 @@ async def auto_start_gateway():
         asyncio.create_task(gateway.start())
 
 
+@asynccontextmanager
+async def lifespan(app):
+    # startup
+    await auto_start_gateway()
+    yield
+    # shutdown
+    await gateway.stop()
+
+
 routes = [
     Route("/", homepage),
     Route("/health", health),
@@ -376,8 +386,7 @@ routes = [
 app = Starlette(
     routes=routes,
     middleware=[Middleware(AuthenticationMiddleware, backend=BasicAuthBackend())],
-    on_startup=[auto_start_gateway],
-    on_shutdown=[gateway.stop],
+    lifespan=lifespan,
 )
 
 
