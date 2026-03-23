@@ -35,23 +35,32 @@ SECRET_FIELDS = {
     "channel_secret", "channel_access_token", "client_secret",
 }
 
-_env_home = os.environ.get("PICOCLAW_HOME")
-if _env_home:
-    CONFIG_DIR = Path(_env_home).expanduser()
-else:
-    # If HOME is relative (e.g. misconfigured to "admin"), Path.home() is relative
+def _get_writable_config_dir():
+    paths = []
+    _env_home = os.environ.get("PICOCLAW_HOME")
+    if _env_home:
+        paths.append(Path(_env_home).expanduser())
     try:
-        CONFIG_DIR = Path.home() / ".picoclaw"
+        paths.append(Path.home() / ".picoclaw")
     except Exception:
-        CONFIG_DIR = Path("/tmp/.picoclaw")
+        pass
+    paths.append(Path("/data/.picoclaw"))
+    paths.append(Path("/tmp/.picoclaw"))
+    
+    for p in paths:
+        if p.is_absolute():
+            try:
+                p.mkdir(parents=True, exist_ok=True)
+                test_file = p / ".write_test"
+                test_file.touch()
+                test_file.unlink()
+                return p
+            except Exception:
+                pass
+    return Path("/tmp/.picoclaw")
 
-# Strictly enforce an absolute path. If the environment (like HOME) leaked a relative string,
-# we MUST override it to an absolute path, otherwise the Go engine crashes trying to mkdir it.
-if not CONFIG_DIR.is_absolute():
-    fallback_base = Path("/data") if Path("/data").exists() else Path("/tmp")
-    CONFIG_DIR = fallback_base / ".picoclaw"
-    print(f"[warn] Enforcing absolute config path: {CONFIG_DIR}")
-
+CONFIG_DIR = _get_writable_config_dir()
+os.environ["PICOCLAW_HOME"] = str(CONFIG_DIR)
 CONFIG_PATH = CONFIG_DIR / "config.json"
 _LOCAL_CONFIG = None  # In-memory config fallback
 
