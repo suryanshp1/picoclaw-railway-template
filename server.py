@@ -229,11 +229,17 @@ class GatewayManager:
         if self.process and self.process.returncode is None:
             return
         self.state = "starting"
+        
+        # Ensure the Go binary respects our safe absolute path
+        gateway_env = os.environ.copy()
+        gateway_env["PICOCLAW_HOME"] = str(CONFIG_DIR)
+        
         try:
             self.process = await asyncio.create_subprocess_exec(
                 "picoclaw", "gateway", "-E",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
+                env=gateway_env
             )
             self.state = "running"
             self.start_time = time.time()
