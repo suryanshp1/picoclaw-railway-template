@@ -1,0 +1,6 @@
+.tmpdata/
+__pycache__/
+*.pyc
+.env
+picclaw-old
+archive\*

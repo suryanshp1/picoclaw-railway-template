@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PicoClaw</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+        }
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] {
+      display: none !important;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+    }
+
+    .log-viewer {
+      font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .log-viewer::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    .log-viewer::-webkit-scrollbar-thumb {
+      border-radius: 3px;
+      background: #374151;
+    }
+
+    .log-viewer::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      border-radius: 3px;
+      background: #1f2937;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .card {
+      background: #0f1117;
+      border: 1px solid #1e2028;
+      border-radius: 12px;
+    }
+
+    .card:hover {
+      border-color: #2a2d38;
+    }
+
+    .input-field {
+      background: #0a0b0f;
+      border: 1px solid #1e2028;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 13px;
+      color: #e5e7eb;
+      width: 100%;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .input-field:focus {
+      border-color: #3b82f6;
+    }
+
+    .input-field::placeholder {
+      color: #4b5563;
+    }
+  </style>
+</head>
+
+<body class="bg-[#07080a] text-gray-300 antialiased h-screen flex overflow-hidden" x-data="app()" x-init="init()"
+  x-cloak>
+
+  <!-- Sidebar -->
+  <aside class="w-56 bg-[#0a0b0f] border-r border-[#1e2028] flex flex-col flex-shrink-0">
+    <div class="p-5 pb-3">
+      <div class="flex items-center gap-2.5">
+        <div
+          class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white text-sm font-bold shadow-lg shadow-blue-500/20">
+          P</div>
+        <span class="text-base font-semibold text-white tracking-tight">PicoClaw</span>
+      </div>
+    </div>
+
+    <nav class="flex-1 px-3 mt-2 space-y-0.5">
+      <button @click="tab = 'overview'"
+        class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150"
+        :class="tab === 'overview' ? 'bg-white/[0.07] text-white' : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.03]'">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+          <rect x="3" y="3" width="7" height="7" rx="1.5" />
+          <rect x="14" y="3" width="7" height="7" rx="1.5" />
+          <rect x="3" y="14" width="7" height="7" rx="1.5" />
+          <rect x="14" y="14" width="7" height="7" rx="1.5" />
+        </svg>
+        Overview
+      </button>
+      <button @click="tab = 'config'"
+        class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150"
+        :class="tab === 'config' ? 'bg-white/[0.07] text-white' : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.03]'">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+          <path
+            d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+        Configuration
+      </button>
+      <button @click="tab = 'system'"
+        class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150"
+        :class="tab === 'system' ? 'bg-white/[0.07] text-white' : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.03]'">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+          <path d="M12 20v-6M6 20V10M18 20V4" />
+        </svg>
+        System
+      </button>
+    </nav>
+
+    <!-- Sidebar footer: gateway status -->
+    <div class="p-4 border-t border-[#1e2028]">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full flex-shrink-0"
+          :class="status.gateway?.state === 'running' ? 'bg-emerald-400' : status.gateway?.state === 'error' ? 'bg-red-400' : 'bg-gray-600'"></span>
+        <span class="text-xs text-gray-500">Gateway</span>
+        <span class="text-xs capitalize ml-auto"
+          :class="status.gateway?.state === 'running' ? 'text-emerald-400' : status.gateway?.state === 'error' ? 'text-red-400' : 'text-gray-500'"
+          x-text="status.gateway?.state || 'unknown'"></span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="flex-1 overflow-y-auto">
+    <div class="max-w-4xl mx-auto px-8 py-8">
+
+      <!-- ==================== OVERVIEW TAB ==================== -->
+      <div x-show="tab === 'overview'" x-transition.opacity.duration.200ms>
+        <div class="flex flex-col items-center text-center pt-8 pb-10">
+          <img src="https://raw.githubusercontent.com/sipeed/picoclaw/main/assets/logo.jpg" alt="PicoClaw"
+            class="h-20 w-auto rounded-2xl shadow-2xl shadow-blue-900/20 mb-6">
+          <h2 class="text-2xl font-bold text-white mb-2">Welcome to PicoClaw</h2>
+          <p class="text-gray-500 text-sm max-w-md">Configure your AI providers, connect messaging channels, and manage
+            your gateway — all from one place.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <!-- Card: Providers -->
+          <button @click="tab = 'config'" class="card p-5 text-left transition-all duration-200 group">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400">
+                <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                </svg>
+              </div>
+              <h3 class="text-sm font-semibold text-white">AI Providers</h3>
+            </div>
+            <p class="text-xs text-gray-500 leading-relaxed">Add API keys for OpenAI, Anthropic, and other providers.
+            </p>
+            <div class="mt-3 text-xs text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">Configure →
+            </div>
+          </button>
+
+          <!-- Card: Channels -->
+          <button @click="tab = 'config'" class="card p-5 text-left transition-all duration-200 group">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-9 h-9 rounded-lg bg-violet-500/10 flex items-center justify-center text-violet-400">
+                <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+              </div>
+              <h3 class="text-sm font-semibold text-white">Channels</h3>
+            </div>
+            <p class="text-xs text-gray-500 leading-relaxed">Connect Telegram, Discord, Slack, and more.</p>
+            <div class="mt-3 text-xs text-violet-400 opacity-0 group-hover:opacity-100 transition-opacity">Configure →
+            </div>
+          </button>
+
+          <!-- Card: System -->
+          <button @click="tab = 'system'" class="card p-5 text-left transition-all duration-200 group">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+                <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                  <path d="M12 20v-6M6 20V10M18 20V4" />
+                </svg>
+              </div>
+              <h3 class="text-sm font-semibold text-white">System</h3>
+            </div>
+            <p class="text-xs text-gray-500 leading-relaxed">Monitor gateway status, logs, and start/stop services.</p>
+            <div class="mt-3 text-xs text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity">View →</div>
+          </button>
+        </div>
+
+        <!-- Quick status summary -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="card p-5">
+            <h4 class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Configured Providers</h4>
+            <div class="space-y-1.5">
+              <template x-for="(info, name) in (status.providers || {})" :key="name">
+                <div x-show="info.configured" class="flex items-center justify-between py-1">
+                  <span class="text-sm text-gray-300 capitalize" x-text="name"></span>
+                  <span
+                    class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Active</span>
+                </div>
+              </template>
+              <div x-show="!Object.values(status.providers || {}).some(p => p.configured)"
+                class="text-xs text-gray-600 italic py-2">No providers configured yet</div>
+            </div>
+          </div>
+          <div class="card p-5">
+            <h4 class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Enabled Channels</h4>
+            <div class="space-y-1.5">
+              <template x-for="(info, name) in (status.channels || {})" :key="name">
+                <div x-show="info.enabled" class="flex items-center justify-between py-1">
+                  <span class="text-sm text-gray-300 capitalize" x-text="name"></span>
+                  <span
+                    class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Enabled</span>
+                </div>
+              </template>
+              <div x-show="!Object.values(status.channels || {}).some(c => c.enabled)"
+                class="text-xs text-gray-600 italic py-2">No channels enabled yet</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== CONFIGURATION TAB ==================== -->
+      <div x-show="tab === 'config'" x-transition.opacity.duration.200ms>
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h2 class="text-xl font-bold text-white">Configuration</h2>
+            <p class="text-xs text-gray-500 mt-1">Manage providers, channels, agent defaults, and tools.</p>
+          </div>
+          <button @click="saveConfig()" :disabled="saving"
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors shadow-lg shadow-blue-600/10 flex items-center gap-2">
+            <svg x-show="saving" class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span x-text="saving ? 'Saving…' : 'Save Configuration'"></span>
+          </button>
+        </div>
+
+        <div class="space-y-8">
+
+          <!-- PROVIDERS SECTION -->
+          <section>
+            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">AI Providers</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <template x-for="p in providerList" :key="p.key">
+                <div class="card p-4">
+                  <h4 class="text-sm font-semibold text-white mb-3" x-text="p.label"></h4>
+                  <div class="space-y-2.5">
+                    <div>
+                      <label class="block text-[11px] text-gray-500 mb-1">API Key</label>
+                      <input type="password" class="input-field" :value="getProvider(p.key, 'api_key')"
+                        @input="setProvider(p.key, 'api_key', $event.target.value)" placeholder="Enter API key">
+                    </div>
+                    <div x-show="p.hasBase">
+                      <label class="block text-[11px] text-gray-500 mb-1">Base URL</label>
+                      <input type="text" class="input-field" :value="getProvider(p.key, 'api_base')"
+                        @input="setProvider(p.key, 'api_base', $event.target.value)"
+                        :placeholder="p.basePlaceholder || 'Optional'">
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </section>
+
+          <!-- CHANNELS SECTION -->
+          <section>
+            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Channels</h3>
+            <div class="space-y-3">
+
+              <!-- Telegram -->
+              <div class="card p-4">
+                <div class="flex items-center justify-between mb-3">
+                  <h4 class="text-sm font-semibold text-white">Telegram</h4>
+                  <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="sr-only peer" x-model="config.channels.telegram.enabled">
+                    <div
+                      class="w-9 h-5 bg-gray-700 peer-checked:bg-blue-600 rounded-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full">
+                    </div>
+                  </label>
+                </div>
+                <div x-show="config.channels.telegram.enabled" class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                  <div>
+                    <label class="block text-[11px] text-gray-500 mb-1">Bot Token</label>
+                    <input type="password" class="input-field" x-model="config.channels.telegram.token"
+                      placeholder="Token from @BotFather">
+                  </div>
+                  <div>
+                    <label class="block text-[11px] text-gray-500 mb-1">Allowed Users (comma-separated)</label>
+                    <input type="text" class="input-field"
+                      :value="(config.channels.telegram.allow_from || []).join(', ')"
+                      @input="config.channels.telegram.allow_from = $event.target.value.split(',').map(s => s.trim()).filter(Boolean)">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Discord -->
+              <div class="card p-4">
+                <div class="flex items-center justify-between mb-3">
+                  <h4 class="text-sm font-semibold text-white">Discord</h4>
+                  <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="sr-only peer" x-model="config.channels.discord.enabled">
+                    <div
+                      class="w-9 h-5 bg-gray-700 peer-checked:bg-blue-600 rounded-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full">
+                    </div>
+                  </label>
+                </div>
+                <div x-show="config.channels.discord.enabled" class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                  <div>
+                    <label class="block text-[11px] text-gray-500 mb-1">Bot Token</label>
+                    <input type="password" class="input-field" x-model="config.channels.discord.token"
+                      placeholder="Token from Developer Portal">
+                  </div>
+                  <div>
+                    <label class="block text-[11px] text-gray-500 mb-1">Allowed Users (comma-separated)</label>
+                    <input type="text" class="input-field"
+                      :value="(config.channels.discord.allow_from || []).join(', ')"
+                      @input="config.channels.discord.allow_from = $event.target.value.split(',').map(s => s.trim()).filter(Boolean)">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Slack -->
+              <div class="card p-4">
+                <div class="flex items-center justify-between mb-3">
+                  <h4 class="text-sm font-semibold text-white">Slack</h4>
+                  <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="sr-only peer" x-model="config.channels.slack.enabled">
+                    <div
+                      class="w-9 h-5 bg-gray-700 peer-checked:bg-blue-600 rounded-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full">
+                    </div>
+                  </label>
+                </div>
+                <div x-show="config.channels.slack.enabled" class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                  <div>
+                    <label class="block text-[11px] text-gray-500 mb-1">Bot Token</label>
+                    <input type="password" class="input-field" x-model="config.channels.slack.bot_token"
+                      placeholder="xoxb-...">
+                  </div>
+                  <div>
+                    <label class="block text-[11px] text-gray-500 mb-1">App Token</label>
+                    <input type="password" class="input-field" x-model="config.channels.slack.app_token"
+                      placeholder="xapp-...">
+                  </div>
+                </div>
+              </div>
+
+              <!-- WhatsApp -->
+              <div class="card p-4">
+                <div class="flex items-center justify-between mb-3">
+                  <h4 class="text-sm font-semibold text-white">WhatsApp</h4>
+                  <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="sr-only peer" x-model="config.channels.whatsapp.enabled">
+                    <div
+                      class="w-9 h-5 bg-gray-700 peer-checked:bg-blue-600 rounded-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full">
+                    </div>
+                  </label>
+                </div>
+                <div x-show="config.channels.whatsapp.enabled" class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                  <div>
+                    <label class="block text-[11px] text-gray-500 mb-1">Bridge URL</label>
+                    <input type="text" class="input-field" x-model="config.channels.whatsapp.bridge_url"
+                      placeholder="ws://localhost:3001">
+                  </div>
+                  <div>
+                    <label class="block text-[11px] text-gray-500 mb-1">Allowed Numbers (comma-separated)</label>
+                    <input type="text" class="input-field"
+                      :value="(config.channels.whatsapp.allow_from || []).join(', ')"
+                      @input="config.channels.whatsapp.allow_from = $event.target.value.split(',').map(s => s.trim()).filter(Boolean)">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Feishu -->
+              <div class="card p-4">
+                <div class="flex items-center justify-between mb-3">
+                  <h4 class="text-sm font-semibold text-white">Feishu</h4>
+                  <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="sr-only peer" x-model="config.channels.feishu.enabled">
+                    <div
+                      class="w-9 h-5 bg-gray-700 peer-checked:bg-blue-600 rounded-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full">
+                    </div>
+                  </label>
+                </div>
+                <div x-show="config.channels.feishu.enabled" class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                  <div>
+                    <label class="block text-[11px] text-gray-500 mb-1">App ID</label>
+                    <input type="text" class="input-field" x-model="config.channels.feishu.app_id">
+                  </div>
+                  <div>
+                    <label class="block text-[11px] text-gray-500 mb-1">App Secret</label>
+                    <input type="password" class="input-field" x-model="config.channels.feishu.app_secret">
+                  </div>
+                  <div>
+                    <label class="block text-[11px] text-gray-500 mb-1">Encrypt Key</label>
+                    <input type="password" class="input-field" x-model="config.channels.feishu.encrypt_key">
+                  </div>
+                  <div>
+                    <label class="block text-[11px] text-gray-500 mb-1">Verification Token</label>
+                    <input type="password" class="input-field" x-model="config.channels.feishu.verification_token">
+                  </div>
+                  <div class="md:col-span-2">
+                    <label class="block text-[11px] text-gray-500 mb-1">Allowed Users (comma-separated)</label>
+                    <input type="text" class="input-field" :value="(config.channels.feishu.allow_from || []).join(', ')"
+                      @input="config.channels.feishu.allow_from = $event.target.value.split(',').map(s => s.trim()).filter(Boolean)">
+                  </div>
+                </div>
+              </div>
+
+              <!-- DingTalk -->
+              <div class="card p-4">
+                <div class="flex items-center justify-between mb-3">
+                  <h4 class="text-sm font-semibold text-white">DingTalk</h4>
+                  <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="sr-only peer" x-model="config.channels.dingtalk.enabled">
+                    <div
+                      class="w-9 h-5 bg-gray-700 peer-checked:bg-blue-600 rounded-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full">
+                    </div>
+                  </label>
+                </div>
+                <div x-show="config.channels.dingtalk.enabled" class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                  <div>
+                    <label class="block text-[11px] text-gray-500 mb-1">Client ID</label>
+                    <input type="text" class="input-field" x-model="config.channels.dingtalk.client_id">
+                  </div>
+                  <div>
+                    <label class="block text-[11px] text-gray-500 mb-1">Client Secret</label>
+                    <input type="password" class="input-field" x-model="config.channels.dingtalk.client_secret">
+                  </div>
+                </div>
+              </div>
+
+              <!-- LINE -->
+              <div class="card p-4">
+                <div class="flex items-center justify-between mb-3">
+                  <h4 class="text-sm font-semibold text-white">LINE</h4>
+                  <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="sr-only peer" x-model="config.channels.line.enabled">
+                    <div
+                      class="w-9 h-5 bg-gray-700 peer-checked:bg-blue-600 rounded-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full">
+                    </div>
+                  </label>
+                </div>
+                <div x-show="config.channels.line.enabled" class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                  <div>
+                    <label class="block text-[11px] text-gray-500 mb-1">Channel Secret</label>
+                    <input type="password" class="input-field" x-model="config.channels.line.channel_secret">
+                  </div>
+                  <div>
+                    <label class="block text-[11px] text-gray-500 mb-1">Channel Access Token</label>
+                    <input type="password" class="input-field" x-model="config.channels.line.channel_access_token">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- AGENT DEFAULTS SECTION -->
+          <section>
+            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Agent Defaults</h3>
+            <div class="card p-4">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-[11px] text-gray-500 mb-1">Default Model</label>
+                  <input type="text" class="input-field" x-model="config.agents.defaults.model">
+                </div>
+                <div>
+                  <label class="block text-[11px] text-gray-500 mb-1">Max Tokens</label>
+                  <input type="number" class="input-field" x-model.number="config.agents.defaults.max_tokens">
+                </div>
+                <div>
+                  <label class="block text-[11px] text-gray-500 mb-1">Temperature</label>
+                  <input type="number" step="0.1" min="0" max="2" class="input-field"
+                    x-model.number="config.agents.defaults.temperature">
+                </div>
+                <div>
+                  <label class="block text-[11px] text-gray-500 mb-1">Max Tool Iterations</label>
+                  <input type="number" class="input-field" x-model.number="config.agents.defaults.max_tool_iterations">
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- TOOLS SECTION -->
+          <section>
+            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Web Search Tools</h3>
+            <div class="card p-4">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-[11px] text-gray-500 mb-1">Brave Search API Key</label>
+                  <input type="password" class="input-field" x-model="config.tools.web.brave.api_key"
+                    placeholder="Optional">
+                </div>
+                <div class="flex items-center gap-2.5 pt-4">
+                  <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="sr-only peer" x-model="config.tools.web.duckduckgo.enabled">
+                    <div
+                      class="w-9 h-5 bg-gray-700 peer-checked:bg-blue-600 rounded-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full">
+                    </div>
+                  </label>
+                  <span class="text-sm text-gray-400">DuckDuckGo Search</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- SAVE BAR -->
+          <div class="card p-4 flex items-center justify-between sticky bottom-4 shadow-2xl shadow-black/50">
+            <label class="flex items-center gap-2.5 cursor-pointer">
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" class="sr-only peer" x-model="restartAfterSave">
+                <div
+                  class="w-9 h-5 bg-gray-700 peer-checked:bg-blue-600 rounded-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full">
+                </div>
+              </label>
+              <span class="text-sm text-gray-400">Restart gateway after save</span>
+            </label>
+            <button @click="saveConfig()" :disabled="saving"
+              class="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2">
+              <svg x-show="saving" class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <span x-text="saving ? 'Saving…' : 'Save Configuration'"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== SYSTEM TAB ==================== -->
+      <div x-show="tab === 'system'" x-transition.opacity.duration.200ms>
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h2 class="text-xl font-bold text-white">System</h2>
+            <p class="text-xs text-gray-500 mt-1">Gateway controls, status, and live logs.</p>
+          </div>
+          <div class="flex gap-2">
+            <button @click="startGateway()"
+              class="text-xs px-3 py-1.5 rounded-lg transition-colors bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20"
+              :disabled="status.gateway?.state === 'running'">Start</button>
+            <button @click="stopGateway()"
+              class="text-xs px-3 py-1.5 rounded-lg transition-colors bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20"
+              :disabled="status.gateway?.state === 'stopped'">Stop</button>
+            <button @click="restartGateway()"
+              class="text-xs px-3 py-1.5 rounded-lg transition-colors bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20">Restart</button>
+          </div>
+        </div>
+
+        <div class="space-y-6">
+
+          <!-- Gateway Status -->
+          <div class="card p-4">
+            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Gateway</h3>
+            <div class="flex items-center gap-6">
+              <div>
+                <span class="text-[11px] text-gray-600">State</span>
+                <p class="text-sm font-medium capitalize" :class="{
+                    'text-emerald-400': status.gateway?.state === 'running',
+                    'text-red-400': status.gateway?.state === 'error',
+                    'text-yellow-400': status.gateway?.state === 'starting' || status.gateway?.state === 'stopping',
+                    'text-gray-500': status.gateway?.state === 'stopped'
+                  }" x-text="status.gateway?.state || 'unknown'"></p>
+              </div>
+              <div x-show="status.gateway?.pid">
+                <span class="text-[11px] text-gray-600">PID</span>
+                <p class="text-sm font-medium text-gray-300" x-text="status.gateway?.pid"></p>
+              </div>
+              <div x-show="status.gateway?.uptime != null">
+                <span class="text-[11px] text-gray-600">Uptime</span>
+                <p class="text-sm font-medium text-gray-300" x-text="formatUptime(status.gateway?.uptime)"></p>
+              </div>
+              <div>
+                <span class="text-[11px] text-gray-600">Restarts</span>
+                <p class="text-sm font-medium text-gray-300" x-text="status.gateway?.restart_count ?? 0"></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Provider Status Table -->
+          <div class="card overflow-hidden">
+            <div class="px-4 py-3 border-b border-[#1e2028]">
+              <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Provider Status</h3>
+            </div>
+            <table class="w-full text-sm">
+              <tbody>
+                <template x-for="(info, name) in (status.providers || {})" :key="name">
+                  <tr class="border-t border-[#1e2028] first:border-0">
+                    <td class="px-4 py-2.5 text-gray-300 capitalize" x-text="name"></td>
+                    <td class="px-4 py-2.5 text-right">
+                      <span class="text-[11px] px-2 py-0.5 rounded-full"
+                        :class="info.configured ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-gray-800 text-gray-600 border border-gray-700'"
+                        x-text="info.configured ? 'Configured' : 'Not set'"></span>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Channel Status Table -->
+          <div class="card overflow-hidden">
+            <div class="px-4 py-3 border-b border-[#1e2028]">
+              <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Channel Status</h3>
+            </div>
+            <table class="w-full text-sm">
+              <tbody>
+                <template x-for="(info, name) in (status.channels || {})" :key="name">
+                  <tr class="border-t border-[#1e2028] first:border-0">
+                    <td class="px-4 py-2.5 text-gray-300 capitalize" x-text="name"></td>
+                    <td class="px-4 py-2.5 text-right">
+                      <span class="text-[11px] px-2 py-0.5 rounded-full"
+                        :class="info.enabled ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-gray-800 text-gray-600 border border-gray-700'"
+                        x-text="info.enabled ? 'Enabled' : 'Disabled'"></span>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Cron Jobs -->
+          <div class="card p-4" x-show="(status.cron?.count || 0) > 0">
+            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Cron Jobs <span
+                class="text-gray-600" x-text="'(' + (status.cron?.count || 0) + ')'"></span></h3>
+            <template x-for="(job, i) in (status.cron?.jobs || [])" :key="i">
+              <div class="text-xs text-gray-500 py-1 font-mono" x-text="JSON.stringify(job)"></div>
+            </template>
+          </div>
+
+          <!-- Logs -->
+          <div class="card overflow-hidden flex flex-col" style="height: 420px;">
+            <div class="px-4 py-2.5 border-b border-[#1e2028] flex items-center justify-between flex-shrink-0">
+              <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Live Logs</h3>
+              <span class="text-[11px] text-gray-600" x-text="logs.length + ' lines'"></span>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4 log-viewer" x-ref="logViewer">
+              <template x-for="(line, i) in logs" :key="i">
+                <div class="text-gray-500 whitespace-pre-wrap break-all py-px hover:text-gray-300 transition-colors"
+                  x-text="line"></div>
+              </template>
+              <div x-show="logs.length === 0" class="text-gray-700 text-center py-12 text-xs italic">Waiting for logs…
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Toast -->
+  <div x-show="toast.show" x-transition
+    class="fixed bottom-6 right-6 px-4 py-3 rounded-xl text-sm font-medium text-white shadow-2xl z-50 border"
+    :class="toast.type === 'error' ? 'bg-red-950 border-red-800 text-red-100' : 'bg-emerald-950 border-emerald-800 text-emerald-100'">
+    <span x-text="toast.message"></span>
+  </div>
+
+  <!-- ==================== JAVASCRIPT — IDENTICAL TO WORKING CODE ==================== -->
+  <script>
+    function app() {
+      return {
+        tab: 'overview',
+        config: defaultConfig(),
+        status: {},
+        logs: [],
+        saving: false,
+        restartAfterSave: true,
+        toast: { show: false, message: '', type: 'success' },
+
+        providerList: [
+          { key: 'anthropic', label: 'Anthropic', hasBase: false },
+          { key: 'openai', label: 'OpenAI', hasBase: true, basePlaceholder: 'https://api.openai.com/v1' },
+          { key: 'openrouter', label: 'OpenRouter', hasBase: true, basePlaceholder: 'https://openrouter.ai/api/v1' },
+          { key: 'deepseek', label: 'DeepSeek', hasBase: false },
+          { key: 'groq', label: 'Groq', hasBase: false },
+          { key: 'gemini', label: 'Gemini', hasBase: false },
+          { key: 'zhipu', label: 'Zhipu', hasBase: true },
+          { key: 'moonshot', label: 'Moonshot', hasBase: false },
+          { key: 'nvidia', label: 'NVIDIA', hasBase: true, basePlaceholder: 'Optional' },
+          { key: 'vllm', label: 'vLLM', hasBase: true, basePlaceholder: 'http://localhost:8000/v1' },
+        ],
+
+        getProvider(key, field) {
+          return this.config.providers?.[key]?.[field] || '';
+        },
+        setProvider(key, field, value) {
+          if (!this.config.providers[key]) this.config.providers[key] = {};
+          this.config.providers[key][field] = value;
+        },
+
+        async init() {
+          await this.loadConfig();
+          await this.loadStatus();
+          await this.loadLogs();
+          setInterval(() => this.loadStatus(), 5000);
+          setInterval(() => this.loadLogs(), 3000);
+        },
+
+        async loadConfig() {
+          try {
+            const res = await fetch('/api/config');
+            if (res.ok) {
+              const data = await res.json();
+              this.config = mergeDeep(defaultConfig(), data);
+            }
+          } catch (e) { }
+        },
+
+        async saveConfig() {
+          this.saving = true;
+          try {
+            const payload = JSON.parse(JSON.stringify(this.config));
+            payload._restartGateway = this.restartAfterSave;
+            const res = await fetch('/api/config', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            if (res.ok) {
+              this.showToast('Configuration saved', 'success');
+              await this.loadConfig();
+            } else {
+              try {
+                const err = await res.json();
+                this.showToast(err.error || 'Save failed (' + res.status + ')', 'error');
+              } catch {
+                const text = await res.text();
+                this.showToast(text || 'Save failed (' + res.status + ')', 'error');
+              }
+            }
+          } catch (e) {
+            this.showToast('Save failed: ' + e.message, 'error');
+          }
+          this.saving = false;
+        },
+
+        async loadStatus() {
+          try {
+            const res = await fetch('/api/status');
+            if (res.ok) this.status = await res.json();
+          } catch (e) { }
+        },
+
+        async loadLogs() {
+          try {
+            const res = await fetch('/api/logs');
+            if (res.ok) {
+              const data = await res.json();
+              const wasAtBottom = this.$refs.logViewer &&
+                (this.$refs.logViewer.scrollTop + this.$refs.logViewer.clientHeight >= this.$refs.logViewer.scrollHeight - 50);
+              this.logs = data.lines;
+              if (wasAtBottom && this.$refs.logViewer) {
+                this.$nextTick(() => {
+                  this.$refs.logViewer.scrollTop = this.$refs.logViewer.scrollHeight;
+                });
+              }
+            }
+          } catch (e) { }
+        },
+
+        async startGateway() {
+          await fetch('/api/gateway/start', { method: 'POST' });
+          this.showToast('Gateway starting', 'success');
+          setTimeout(() => this.loadStatus(), 1000);
+        },
+
+        async stopGateway() {
+          await fetch('/api/gateway/stop', { method: 'POST' });
+          this.showToast('Gateway stopping', 'success');
+          setTimeout(() => this.loadStatus(), 1000);
+        },
+
+        async restartGateway() {
+          await fetch('/api/gateway/restart', { method: 'POST' });
+          this.showToast('Gateway restarting', 'success');
+          setTimeout(() => this.loadStatus(), 2000);
+        },
+
+        formatUptime(seconds) {
+          if (seconds == null) return '';
+          const h = Math.floor(seconds / 3600);
+          const m = Math.floor((seconds % 3600) / 60);
+          const s = seconds % 60;
+          if (h > 0) return h + 'h ' + m + 'm ' + s + 's';
+          if (m > 0) return m + 'm ' + s + 's';
+          return s + 's';
+        },
+
+        showToast(message, type) {
+          type = type || 'success';
+          this.toast = { show: true, message: message, type: type };
+          setTimeout(() => { this.toast.show = false; }, 3000);
+        }
+      };
+    }
+
+    function defaultConfig() {
+      return {
+        agents: { defaults: { workspace: '~/.picoclaw/workspace', restrict_to_workspace: true, provider: '', model: 'glm-4.7', max_tokens: 8192, temperature: 0.7, max_tool_iterations: 20 } },
+        channels: {
+          telegram: { enabled: false, token: '', proxy: '', allow_from: [] },
+          discord: { enabled: false, token: '', allow_from: [] },
+          slack: { enabled: false, bot_token: '', app_token: '', allow_from: [] },
+          whatsapp: { enabled: false, bridge_url: 'ws://localhost:3001', allow_from: [] },
+          feishu: { enabled: false, app_id: '', app_secret: '', encrypt_key: '', verification_token: '', allow_from: [] },
+          dingtalk: { enabled: false, client_id: '', client_secret: '', allow_from: [] },
+          qq: { enabled: false, app_id: '', app_secret: '', allow_from: [] },
+          line: { enabled: false, channel_secret: '', channel_access_token: '', webhook_host: '0.0.0.0', webhook_port: 18791, webhook_path: '/webhook/line', allow_from: [] },
+          maixcam: { enabled: false, host: '0.0.0.0', port: 18790, allow_from: [] },
+        },
+        providers: {
+          anthropic: { api_key: '' },
+          openai: { api_key: '', api_base: '' },
+          openrouter: { api_key: '' },
+          deepseek: { api_key: '' },
+          groq: { api_key: '' },
+          gemini: { api_key: '' },
+          zhipu: { api_key: '', api_base: '' },
+          vllm: { api_key: '', api_base: '' },
+          nvidia: { api_key: '', api_base: '' },
+          moonshot: { api_key: '' },
+        },
+        gateway: { host: '0.0.0.0', port: 18790 },
+        tools: { web: { brave: { enabled: false, api_key: '', max_results: 5 }, duckduckgo: { enabled: true, max_results: 5 } } },
+        heartbeat: { enabled: true, interval: 30 },
+        devices: { enabled: false, monitor_usb: false },
+      };
+    }
+
+    function mergeDeep(target, source) {
+      const output = Object.assign({}, target);
+      for (const key of Object.keys(source)) {
+        if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+          output[key] = mergeDeep(target[key] || {}, source[key]);
+        } else {
+          output[key] = source[key];
+        }
+      }
+      return output;
+    }
+  </script>
+</body>
+
+</html>
